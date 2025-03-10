@@ -8,12 +8,13 @@ class Order {
 public:
     int id;
     OrderType type;
+    OrderSide side;
     double price;
     int quantity;
     bool active;
 
-    Order(int id, OrderType type, double price, int quantity);
+    Order(int id, OrderType type, OrderSide side, double price, int quantity);
     std::string toString() const;
 };
 
-#endif
+#endif // ORDER_HPP
