@@ -3,6 +3,7 @@
 #include "imgui_impl_opengl3.h"
 #include "../headers/orderbook.hpp"
 #include "../headers/enum.hpp"
+#include "../headers/globals.hpp"
 #include <GLFW/glfw3.h>
 #include <cstdlib>
 #include <ctime>
@@ -10,17 +11,10 @@
 #include <string>
 #include <sstream>
 
-// Global notifications vector (for UI messages)
+Account account = {10000.0, 0};
 std::vector<std::string> notifications;
 
-// Account simulation: track cash and asset holdings
-struct Account {
-    double cash;
-    int asset;
-};
-Account account = {10000.0, 0};  // Starting with $10,000 cash and 0 assets
-
-// Helper to format account balance as string
+// Helper to format account as a string
 std::string accountToString(const Account &acc) {
     std::ostringstream oss;
     oss << "Cash: $" << acc.cash << " | Asset: " << acc.asset;

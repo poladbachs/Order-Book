@@ -1,17 +1,11 @@
 #include "../headers/orderbook.hpp"
 #include "../headers/order.hpp"
 #include "../headers/enum.hpp"
+#include "../headers/globals.hpp"
 #include <algorithm>
 #include <iostream>
 #include <string>
 #include <vector>
-
-// Declare external notifications vector and account
-extern std::vector<std::string> notifications;
-
-// Forward-declare Account (defined in main.cpp)
-struct Account;
-extern Account account;
 
 OrderBook::OrderBook() : nextOrderId(1) {}
 
@@ -27,8 +21,9 @@ int OrderBook::addOrder(OrderType type, OrderSide side, double price, int quanti
                    (side == OrderSide::Buy && order.price <= price) ||
                    (side == OrderSide::Sell && order.price >= price)) {
                     int tradeQty = std::min(newOrder.quantity, order.quantity);
-                    std::string notif = "Trade Executed: " + std::string((side == OrderSide::Buy ? "Buy " : "Sell ")) 
-                        + std::to_string(tradeQty) + " @ " + std::to_string(order.price);
+                    std::string notif = "Trade Executed: " +
+                        std::string((side == OrderSide::Buy ? "Buy " : "Sell ")) +
+                        std::to_string(tradeQty) + " @ " + std::to_string(order.price);
                     notifications.push_back(notif);
                     // Update account balance accordingly
                     if (side == OrderSide::Buy) {
@@ -90,7 +85,8 @@ void OrderBook::simulateMarket(double currentPrice) {
             // For Buy StopLoss: trigger if currentPrice >= order.price.
             if ((order.side == OrderSide::Sell && currentPrice <= order.price) ||
                 (order.side == OrderSide::Buy && currentPrice >= order.price)) {
-                std::string notif = "StopLoss Triggered: " + order.toString() + " at " + std::to_string(currentPrice);
+                std::string notif = "StopLoss Triggered: " + order.toString() +
+                    " at " + std::to_string(currentPrice);
                 notifications.push_back(notif);
                 order.active = false;
             }
@@ -99,7 +95,8 @@ void OrderBook::simulateMarket(double currentPrice) {
             // For Buy TakeProfit: trigger if currentPrice <= order.price.
             if ((order.side == OrderSide::Sell && currentPrice >= order.price) ||
                 (order.side == OrderSide::Buy && currentPrice <= order.price)) {
-                std::string notif = "TakeProfit Triggered: " + order.toString() + " at " + std::to_string(currentPrice);
+                std::string notif = "TakeProfit Triggered: " + order.toString() +
+                    " at " + std::to_string(currentPrice);
                 notifications.push_back(notif);
                 order.active = false;
             }
