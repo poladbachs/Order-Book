@@ -10,11 +10,14 @@
 #include <vector>
 #include <string>
 #include <sstream>
+#include <unordered_map>
 
-Account account = {10000.0, 0};  // Starting with $10,000 cash and 0 assets
+// Define global variables (if not defined elsewhere).
+// They are already declared in globals.hpp.
+Account account;
 std::vector<std::string> notifications;
 
-// Helper to format account as a string using the current asset symbol.
+// Helper to format account as a string with a custom asset label.
 std::string accountToString(const Account &acc, const std::string &assetLabel) {
     std::ostringstream oss;
     oss << "Cash: $" << acc.cash << " | " << assetLabel << ": " << acc.asset;
@@ -35,21 +38,31 @@ int main()
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
 
-    // Setup ImGui context and modern dark style.
+    // Setup ImGui context and style (modern dark theme)
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
-    // Use GLSL version 150 which is compatible with our setup on macOS.
+    // Use GLSL version 150 (compatible with our macOS setup)
     ImGui_ImplOpenGL3_Init("#version 150");
 
-    // Initialize global account (starting with $10,000 and 0 assets)
+    // Initialize global account: starting with $10,000 and 0 assets.
     account.cash = 10000.0;
     account.asset = 0;
 
-    // Simulated market variables
-    double currentPrice = 100.0;  // Starting market price
-    std::srand(static_cast<unsigned>(std::time(nullptr)));
+    // Create a mapping for each asset's current market price.
+    // Use realistic starting prices.
+    std::unordered_map<std::string, double> assetPrices = {
+        {"BTC", 20000.0},
+        {"ETH", 1500.0},
+        {"AAPL", 150.0},
+        {"GOLD", 1800.0}
+    };
+
+    // Asset selection: available asset symbols.
+    const char* assetList[] = {"BTC", "ETH", "AAPL", "GOLD"};
+    int selectedAssetIndex = 0;
+    std::string currentAsset = assetList[selectedAssetIndex];
 
     // Input buffers for order entry
     char priceBuffer[32] = "100.0";
@@ -58,22 +71,29 @@ int main()
     int selectedOrderType = 0;  // 0: Market, 1: Limit, 2: StopLoss, 3: TakeProfit
     int selectedOrderSide = 0;  // 0: Buy, 1: Sell
 
-    // Asset selection: choose which asset you want to trade.
-    int selectedAssetIndex = 0;
-    const char* assetList[] = {"BTC", "ETH", "AAPL", "GOLD"};
-    std::string currentAsset = assetList[selectedAssetIndex];
-
     OrderBook orderBook;
+
+    std::srand(static_cast<unsigned>(std::time(nullptr)));
 
     while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
 
-        // Simulate market price update (random walk, delta between -0.5 and 0.5)
-        currentPrice += (std::rand() % 100 - 50) / 100.0;
-        if (currentPrice < 1.0) currentPrice = 1.0;
+        // Update current asset based on selection.
+        currentAsset = assetList[selectedAssetIndex];
+        // Get the current price for the selected asset.
+        double currentPrice = assetPrices[currentAsset];
 
-        // Process StopLoss and TakeProfit orders based on current market price.
+        // Simulate a percentage-based random walk:
+        // Delta between -0.5% and +0.5%
+        double delta = ((std::rand() % 101) - 50) / 10000.0;
+        currentPrice *= (1 + delta);
+        // Ensure a minimum price (e.g., 1.0) so it never goes negative.
+        if (currentPrice < 1.0) currentPrice = 1.0;
+        // Update the map.
+        assetPrices[currentAsset] = currentPrice;
+
+        // Process StopLoss and TakeProfit orders based on the current price.
         orderBook.simulateMarket(currentPrice);
 
         // Start ImGui frame.
@@ -84,17 +104,16 @@ int main()
         // Main UI Window.
         ImGui::Begin("Order Book Engine");
 
-        // Asset Selection.
+        // Asset selection.
         ImGui::Text("Select Asset:");
         ImGui::Combo("Asset", &selectedAssetIndex, assetList, IM_ARRAYSIZE(assetList));
-        currentAsset = assetList[selectedAssetIndex];
 
-        // Display market price and account balance.
-        ImGui::Text("Current Market Price: %.2f", currentPrice);
+        // Display current market price and account balance.
+        ImGui::Text("Current %s Price: %.2f", currentAsset.c_str(), currentPrice);
         ImGui::Text("%s", accountToString(account, "Asset (" + currentAsset + ")").c_str());
         ImGui::Separator();
 
-        // Place New Order Section.
+        // Section: Place New Order.
         ImGui::Text("Place New Order");
         const char* orderTypes[] = {"Market", "Limit", "StopLoss", "TakeProfit"};
         ImGui::Combo("Order Type", &selectedOrderType, orderTypes, IM_ARRAYSIZE(orderTypes));
@@ -106,14 +125,18 @@ int main()
         {
             double orderPrice = atof(priceBuffer);
             int orderQuantity = atoi(quantityBuffer);
-            OrderType type = static_cast<OrderType>(selectedOrderType);
-            OrderSide side = static_cast<OrderSide>(selectedOrderSide);
-            // Pass the current asset symbol to the order.
-            orderBook.addOrder(type, side, orderPrice, orderQuantity, currentAsset);
+            // For Sell orders, ensure that you have enough assets.
+            if (selectedOrderSide == 1 && orderQuantity > account.asset) {
+                notifications.push_back("Order Rejected: Insufficient " + currentAsset + " assets to sell.");
+            } else {
+                OrderType type = static_cast<OrderType>(selectedOrderType);
+                OrderSide side = static_cast<OrderSide>(selectedOrderSide);
+                orderBook.addOrder(type, side, orderPrice, orderQuantity, currentAsset);
+            }
         }
         ImGui::Separator();
 
-        // Cancel Order Section.
+        // Section: Cancel Order.
         ImGui::Text("Cancel Order");
         ImGui::InputText("Order ID", cancelBuffer, IM_ARRAYSIZE(cancelBuffer));
         if (ImGui::Button("Cancel Order"))
@@ -123,16 +146,16 @@ int main()
         }
         ImGui::Separator();
 
-        // Active Orders Display.
+        // Section: Active Orders.
         ImGui::Text("Active Orders:");
         for (const auto &order : orderBook.getOrders())
         {
-            if (order.active)
+            if (order.active && order.symbol == currentAsset)
                 ImGui::TextWrapped("%s", order.toString().c_str());
         }
         ImGui::Separator();
 
-        // Notifications Panel (scrollable).
+        // Section: Notifications (scrollable).
         ImGui::Text("Notifications:");
         ImGui::BeginChild("Notifications", ImVec2(0, 150), true);
         for (const auto &notif : notifications)
