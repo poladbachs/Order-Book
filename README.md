@@ -11,13 +11,6 @@ A C++ pet project that simulates a realistic order book engine (Crypto, Commodit
 
 ---
 
-## Overview
-
-- **Modern GUI & Charts:**  
-  Interactive UI using Dear ImGui and dynamic charts via ImPlot that display real‑time price history.
-
----
-
 ## 📌 How It Works
 - **Market Simulation:**
   Each asset’s price (BTC, ETH, AAPL, GOLD) is updated using a controlled random walk to simulate realistic price movements within predefined boundaries.
