@@ -1,4 +1,4 @@
-![Image](https://github.com/user-attachments/assets/4d989fb2-6da7-4737-b9e9-501886684796)
+![Image](https://github.com/user-attachments/assets/14f4884e-1cd5-439c-a67f-a05a71ca4691)
 
 # C++ Order Book Engine
 
