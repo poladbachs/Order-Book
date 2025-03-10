@@ -11,13 +11,13 @@
 #include <string>
 #include <sstream>
 
-Account account = {10000.0, 0};
+Account account = {10000.0, 0};  // Starting with $10,000 cash and 0 assets
 std::vector<std::string> notifications;
 
-// Helper to format account as a string
-std::string accountToString(const Account &acc) {
+// Helper to format account as a string using the current asset symbol.
+std::string accountToString(const Account &acc, const std::string &assetLabel) {
     std::ostringstream oss;
-    oss << "Cash: $" << acc.cash << " | Asset: " << acc.asset;
+    oss << "Cash: $" << acc.cash << " | " << assetLabel << ": " << acc.asset;
     return oss.str();
 }
 
@@ -35,15 +35,19 @@ int main()
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
 
-    // Setup ImGui context and style (modern dark theme)
+    // Setup ImGui context and modern dark style.
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
-    // Use GLSL version 150 which is compatible with our setup on macOS
+    // Use GLSL version 150 which is compatible with our setup on macOS.
     ImGui_ImplOpenGL3_Init("#version 150");
 
-    // Initialize simulated market variables
+    // Initialize global account (starting with $10,000 and 0 assets)
+    account.cash = 10000.0;
+    account.asset = 0;
+
+    // Simulated market variables
     double currentPrice = 100.0;  // Starting market price
     std::srand(static_cast<unsigned>(std::time(nullptr)));
 
@@ -54,33 +58,43 @@ int main()
     int selectedOrderType = 0;  // 0: Market, 1: Limit, 2: StopLoss, 3: TakeProfit
     int selectedOrderSide = 0;  // 0: Buy, 1: Sell
 
+    // Asset selection: choose which asset you want to trade.
+    int selectedAssetIndex = 0;
+    const char* assetList[] = {"BTC", "ETH", "AAPL", "GOLD"};
+    std::string currentAsset = assetList[selectedAssetIndex];
+
     OrderBook orderBook;
 
     while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
 
-        // Simulate market price update (simple random walk)
-        currentPrice += (std::rand() % 100 - 50) / 100.0; // Delta between -0.5 and 0.5
+        // Simulate market price update (random walk, delta between -0.5 and 0.5)
+        currentPrice += (std::rand() % 100 - 50) / 100.0;
         if (currentPrice < 1.0) currentPrice = 1.0;
 
-        // Process stop-loss and take-profit triggers based on current market price
+        // Process StopLoss and TakeProfit orders based on current market price.
         orderBook.simulateMarket(currentPrice);
 
-        // Start ImGui frame
+        // Start ImGui frame.
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // Main UI Window
+        // Main UI Window.
         ImGui::Begin("Order Book Engine");
 
-        // Display simulated market price and account balance
+        // Asset Selection.
+        ImGui::Text("Select Asset:");
+        ImGui::Combo("Asset", &selectedAssetIndex, assetList, IM_ARRAYSIZE(assetList));
+        currentAsset = assetList[selectedAssetIndex];
+
+        // Display market price and account balance.
         ImGui::Text("Current Market Price: %.2f", currentPrice);
-        ImGui::Text("%s", accountToString(account).c_str());
+        ImGui::Text("%s", accountToString(account, "Asset (" + currentAsset + ")").c_str());
         ImGui::Separator();
 
-        // Section: Place New Order
+        // Place New Order Section.
         ImGui::Text("Place New Order");
         const char* orderTypes[] = {"Market", "Limit", "StopLoss", "TakeProfit"};
         ImGui::Combo("Order Type", &selectedOrderType, orderTypes, IM_ARRAYSIZE(orderTypes));
@@ -94,11 +108,12 @@ int main()
             int orderQuantity = atoi(quantityBuffer);
             OrderType type = static_cast<OrderType>(selectedOrderType);
             OrderSide side = static_cast<OrderSide>(selectedOrderSide);
-            orderBook.addOrder(type, side, orderPrice, orderQuantity);
+            // Pass the current asset symbol to the order.
+            orderBook.addOrder(type, side, orderPrice, orderQuantity, currentAsset);
         }
         ImGui::Separator();
 
-        // Section: Cancel Order
+        // Cancel Order Section.
         ImGui::Text("Cancel Order");
         ImGui::InputText("Order ID", cancelBuffer, IM_ARRAYSIZE(cancelBuffer));
         if (ImGui::Button("Cancel Order"))
@@ -108,7 +123,7 @@ int main()
         }
         ImGui::Separator();
 
-        // Section: Active Orders
+        // Active Orders Display.
         ImGui::Text("Active Orders:");
         for (const auto &order : orderBook.getOrders())
         {
@@ -117,7 +132,7 @@ int main()
         }
         ImGui::Separator();
 
-        // Section: Notifications (scrollable)
+        // Notifications Panel (scrollable).
         ImGui::Text("Notifications:");
         ImGui::BeginChild("Notifications", ImVec2(0, 150), true);
         for (const auto &notif : notifications)
@@ -128,7 +143,7 @@ int main()
 
         ImGui::End();
 
-        // Rendering
+        // Rendering.
         ImGui::Render();
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
@@ -139,7 +154,7 @@ int main()
         glfwSwapBuffers(window);
     }
 
-    // Cleanup
+    // Cleanup.
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
