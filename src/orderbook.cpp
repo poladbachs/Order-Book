@@ -3,12 +3,18 @@
 #include "../headers/enum.hpp"
 #include <algorithm>
 #include <iostream>
+#include <string>
+#include <vector>
+
+// Declare external notifications vector and account
+extern std::vector<std::string> notifications;
+
+// Forward-declare Account (defined in main.cpp)
+struct Account;
+extern Account account;
 
 OrderBook::OrderBook() : nextOrderId(1) {}
 
-// Basic matching engine:
-// - For Market orders, match with the best available orders on the opposite side.
-// - For Limit orders, if the price crosses the spread, execute matching.
 int OrderBook::addOrder(OrderType type, OrderSide side, double price, int quantity) {
     Order newOrder(nextOrderId++, type, side, price, quantity);
 
@@ -16,17 +22,22 @@ int OrderBook::addOrder(OrderType type, OrderSide side, double price, int quanti
         // Attempt to match with orders on the opposite side
         for (auto &order : orders) {
             if (!order.active) continue;
-            if (order.side != side) { // opposite side
-                // For Market orders, always match.
-                // For Limit orders: Buy order matches if existing Sell order price <= new order price;
-                // Sell order matches if existing Buy order price >= new order price.
+            if (order.side != side) { // Opposite side
                 if (type == OrderType::Market ||
-                    (side == OrderSide::Buy && order.price <= price) ||
-                    (side == OrderSide::Sell && order.price >= price)) {
+                   (side == OrderSide::Buy && order.price <= price) ||
+                   (side == OrderSide::Sell && order.price >= price)) {
                     int tradeQty = std::min(newOrder.quantity, order.quantity);
-                    std::cout << "Trade Executed: " 
-                              << (side == OrderSide::Buy ? "Buy" : "Sell")
-                              << " " << tradeQty << " @ " << order.price << std::endl;
+                    std::string notif = "Trade Executed: " + std::string((side == OrderSide::Buy ? "Buy " : "Sell ")) 
+                        + std::to_string(tradeQty) + " @ " + std::to_string(order.price);
+                    notifications.push_back(notif);
+                    // Update account balance accordingly
+                    if (side == OrderSide::Buy) {
+                        account.cash -= tradeQty * order.price;
+                        account.asset += tradeQty;
+                    } else {
+                        account.cash += tradeQty * order.price;
+                        account.asset -= tradeQty;
+                    }
                     newOrder.quantity -= tradeQty;
                     order.quantity -= tradeQty;
                     if (order.quantity == 0) order.active = false;
@@ -34,15 +45,14 @@ int OrderBook::addOrder(OrderType type, OrderSide side, double price, int quanti
                 }
             }
         }
-        // If not fully filled, add remaining order to book
         if (newOrder.quantity > 0) {
             orders.push_back(newOrder);
             return newOrder.id;
         } else {
-            return newOrder.id; // Fully executed order (for simulation, still return an ID)
+            return newOrder.id;
         }
     } else {
-        // For StopLoss and TakeProfit orders, just add to the book.
+        // For StopLoss and TakeProfit, just add to the book
         orders.push_back(newOrder);
         return newOrder.id;
     }
@@ -52,7 +62,7 @@ bool OrderBook::cancelOrder(int orderId) {
     for (auto &order : orders) {
         if (order.id == orderId && order.active) {
             order.active = false;
-            std::cout << "Order Cancelled: ID " << orderId << std::endl;
+            notifications.push_back("Order Cancelled: ID " + std::to_string(orderId));
             return true;
         }
     }
@@ -71,17 +81,17 @@ const std::vector<Order>& OrderBook::getOrders() const {
     return orders;
 }
 
-// Simulate market update: trigger StopLoss/TakeProfit orders if conditions met.
 void OrderBook::simulateMarket(double currentPrice) {
+    // Process StopLoss and TakeProfit triggers
     for (auto &order : orders) {
         if (!order.active) continue;
         if (order.type == OrderType::StopLoss) {
             // For Sell StopLoss: trigger if currentPrice <= order.price.
-            // For Buy StopLoss (rare): trigger if currentPrice >= order.price.
+            // For Buy StopLoss: trigger if currentPrice >= order.price.
             if ((order.side == OrderSide::Sell && currentPrice <= order.price) ||
                 (order.side == OrderSide::Buy && currentPrice >= order.price)) {
-                std::cout << "StopLoss Triggered: " << order.toString() 
-                          << " at market price " << currentPrice << std::endl;
+                std::string notif = "StopLoss Triggered: " + order.toString() + " at " + std::to_string(currentPrice);
+                notifications.push_back(notif);
                 order.active = false;
             }
         } else if (order.type == OrderType::TakeProfit) {
@@ -89,8 +99,8 @@ void OrderBook::simulateMarket(double currentPrice) {
             // For Buy TakeProfit: trigger if currentPrice <= order.price.
             if ((order.side == OrderSide::Sell && currentPrice >= order.price) ||
                 (order.side == OrderSide::Buy && currentPrice <= order.price)) {
-                std::cout << "TakeProfit Triggered: " << order.toString() 
-                          << " at market price " << currentPrice << std::endl;
+                std::string notif = "TakeProfit Triggered: " + order.toString() + " at " + std::to_string(currentPrice);
+                notifications.push_back(notif);
                 order.active = false;
             }
         }
