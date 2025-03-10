@@ -3,15 +3,14 @@
 
 #include <vector>
 #include <string>
+#include <unordered_map>
 
-// Account simulation: represents your trading position.
-// For example, if trading Bitcoin, 'asset' means your BTC holdings.
+
 struct Account {
     double cash;
-    int asset;
+    std::unordered_map<std::string, int> assets;
 };
 
-// Global variables accessible across the project.
 extern Account account;
 extern std::vector<std::string> notifications;
 

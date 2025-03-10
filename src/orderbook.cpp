@@ -6,12 +6,13 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 OrderBook::OrderBook() : nextOrderId(1) {}
 
 int OrderBook::addOrder(OrderType type, OrderSide side, double price, int quantity, const std::string &symbol) {
-    // For Sell orders, check if the account has enough asset.
-    if (side == OrderSide::Sell && quantity > account.asset) {
+    int ownedQty = account.assets.count(symbol) ? account.assets[symbol] : 0;
+    if (side == OrderSide::Sell && quantity > ownedQty) {
         notifications.push_back("Order Rejected: Insufficient " + symbol + " assets to sell.");
         return -1;
     }
@@ -19,7 +20,6 @@ int OrderBook::addOrder(OrderType type, OrderSide side, double price, int quanti
     Order newOrder(nextOrderId++, type, side, price, quantity, symbol);
 
     if (type == OrderType::Market || type == OrderType::Limit) {
-        // Attempt to match with orders on the opposite side that share the same asset.
         for (auto &order : orders) {
             if (!order.active) continue;
             if (order.symbol == symbol && order.side != side) {
@@ -34,14 +34,16 @@ int OrderBook::addOrder(OrderType type, OrderSide side, double price, int quanti
                         (side == OrderSide::Buy ? "Buy " : "Sell ") +
                         std::to_string(tradeQty) + " @ " + std::to_string(order.price);
                     notifications.push_back(notif);
-                    // Update account balance.
+
+                    // Update account balance per asset
                     if (side == OrderSide::Buy) {
                         account.cash -= tradeQty * order.price;
-                        account.asset += tradeQty;
+                        account.assets[symbol] += tradeQty; // Track per asset
                     } else {
                         account.cash += tradeQty * order.price;
-                        account.asset -= tradeQty;
+                        account.assets[symbol] -= tradeQty;
                     }
+
                     newOrder.quantity -= tradeQty;
                     order.quantity -= tradeQty;
                     if (order.quantity == 0) order.active = false;
@@ -49,7 +51,7 @@ int OrderBook::addOrder(OrderType type, OrderSide side, double price, int quanti
                 }
             }
         }
-        // If the order isn't fully filled, add the remaining order to the book.
+        // If the order isn't fully filled, add it to the book.
         if (newOrder.quantity > 0) {
             orders.push_back(newOrder);
             return newOrder.id;
@@ -102,10 +104,10 @@ void OrderBook::simulateMarket(double currentPrice) {
                 // Execute trade at currentPrice.
                 if (order.side == OrderSide::Sell) {
                     account.cash += order.quantity * currentPrice;
-                    account.asset -= order.quantity;
+                    account.assets[order.symbol] -= order.quantity;
                 } else {
                     account.cash -= order.quantity * currentPrice;
-                    account.asset += order.quantity;
+                    account.assets[order.symbol] += order.quantity;
                 }
             }
         } else if (order.type == OrderType::TakeProfit) {
@@ -119,10 +121,10 @@ void OrderBook::simulateMarket(double currentPrice) {
                 order.active = false;
                 if (order.side == OrderSide::Sell) {
                     account.cash += order.quantity * currentPrice;
-                    account.asset -= order.quantity;
+                    account.assets[order.symbol] -= order.quantity;
                 } else {
                     account.cash -= order.quantity * currentPrice;
-                    account.asset += order.quantity;
+                    account.assets[order.symbol] += order.quantity;
                 }
             }
         }

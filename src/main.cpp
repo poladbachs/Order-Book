@@ -12,15 +12,15 @@
 #include <sstream>
 #include <unordered_map>
 
-// Define global variables (if not defined elsewhere).
-// They are already declared in globals.hpp.
+// Define global variables (already declared in globals.hpp)
 Account account;
 std::vector<std::string> notifications;
 
-// Helper to format account as a string with a custom asset label.
-std::string accountToString(const Account &acc, const std::string &assetLabel) {
+// Helper function to format account balance for selected asset
+std::string accountToString(const Account &acc, const std::string &asset) {
+    int assetQty = acc.assets.count(asset) ? acc.assets.at(asset) : 0;
     std::ostringstream oss;
-    oss << "Cash: $" << acc.cash << " | " << assetLabel << ": " << acc.asset;
+    oss << "Cash: $" << acc.cash << " | Asset (" << asset << "): " << assetQty;
     return oss.str();
 }
 
@@ -43,23 +43,21 @@ int main()
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
-    // Use GLSL version 150 (compatible with our macOS setup)
+    // Use GLSL version 150 (compatible with macOS)
     ImGui_ImplOpenGL3_Init("#version 150");
 
-    // Initialize global account: starting with $10,000 and 0 assets.
+    // Initialize global account: starting with $10,000 and empty assets
     account.cash = 10000.0;
-    account.asset = 0;
 
-    // Create a mapping for each asset's current market price.
-    // Use realistic starting prices.
+    // Create a mapping for each asset's current market price (realistic values)
     std::unordered_map<std::string, double> assetPrices = {
-        {"BTC", 20000.0},
+        {"BTC", 80000.0},
         {"ETH", 1500.0},
-        {"AAPL", 150.0},
-        {"GOLD", 1800.0}
+        {"AAPL", 220.0},
+        {"GOLD", 2900.0}
     };
 
-    // Asset selection: available asset symbols.
+    // Asset selection: available asset symbols
     const char* assetList[] = {"BTC", "ETH", "AAPL", "GOLD"};
     int selectedAssetIndex = 0;
     std::string currentAsset = assetList[selectedAssetIndex];
@@ -79,41 +77,40 @@ int main()
     {
         glfwPollEvents();
 
-        // Update current asset based on selection.
+        // Update current asset based on selection
         currentAsset = assetList[selectedAssetIndex];
-        // Get the current price for the selected asset.
+        // Get the current price for the selected asset
         double currentPrice = assetPrices[currentAsset];
 
-        // Simulate a percentage-based random walk:
-        // Delta between -0.5% and +0.5%
+        // Simulate a percentage-based random walk (delta between -0.5% and +0.5%)
         double delta = ((std::rand() % 101) - 50) / 10000.0;
         currentPrice *= (1 + delta);
-        // Ensure a minimum price (e.g., 1.0) so it never goes negative.
+        // Ensure a minimum price (e.g., 1.0) so it never goes negative
         if (currentPrice < 1.0) currentPrice = 1.0;
-        // Update the map.
+        // Update price map
         assetPrices[currentAsset] = currentPrice;
 
-        // Process StopLoss and TakeProfit orders based on the current price.
+        // Process StopLoss and TakeProfit orders for the selected asset
         orderBook.simulateMarket(currentPrice);
 
-        // Start ImGui frame.
+        // Start ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // Main UI Window.
+        // Main UI Window
         ImGui::Begin("Order Book Engine");
 
-        // Asset selection.
+        // Asset selection
         ImGui::Text("Select Asset:");
         ImGui::Combo("Asset", &selectedAssetIndex, assetList, IM_ARRAYSIZE(assetList));
 
-        // Display current market price and account balance.
+        // Display market price and correct asset balance
         ImGui::Text("Current %s Price: %.2f", currentAsset.c_str(), currentPrice);
-        ImGui::Text("%s", accountToString(account, "Asset (" + currentAsset + ")").c_str());
+        ImGui::Text("%s", accountToString(account, currentAsset).c_str());
         ImGui::Separator();
 
-        // Section: Place New Order.
+        // Section: Place New Order
         ImGui::Text("Place New Order");
         const char* orderTypes[] = {"Market", "Limit", "StopLoss", "TakeProfit"};
         ImGui::Combo("Order Type", &selectedOrderType, orderTypes, IM_ARRAYSIZE(orderTypes));
@@ -125,8 +122,9 @@ int main()
         {
             double orderPrice = atof(priceBuffer);
             int orderQuantity = atoi(quantityBuffer);
-            // For Sell orders, ensure that you have enough assets.
-            if (selectedOrderSide == 1 && orderQuantity > account.asset) {
+            // Check if user has enough assets for a sell order
+            int ownedQty = account.assets.count(currentAsset) ? account.assets[currentAsset] : 0;
+            if (selectedOrderSide == 1 && orderQuantity > ownedQty) {
                 notifications.push_back("Order Rejected: Insufficient " + currentAsset + " assets to sell.");
             } else {
                 OrderType type = static_cast<OrderType>(selectedOrderType);
@@ -136,7 +134,7 @@ int main()
         }
         ImGui::Separator();
 
-        // Section: Cancel Order.
+        // Section: Cancel Order
         ImGui::Text("Cancel Order");
         ImGui::InputText("Order ID", cancelBuffer, IM_ARRAYSIZE(cancelBuffer));
         if (ImGui::Button("Cancel Order"))
@@ -146,7 +144,7 @@ int main()
         }
         ImGui::Separator();
 
-        // Section: Active Orders.
+        // Section: Active Orders
         ImGui::Text("Active Orders:");
         for (const auto &order : orderBook.getOrders())
         {
@@ -155,7 +153,7 @@ int main()
         }
         ImGui::Separator();
 
-        // Section: Notifications (scrollable).
+        // Section: Notifications (scrollable)
         ImGui::Text("Notifications:");
         ImGui::BeginChild("Notifications", ImVec2(0, 150), true);
         for (const auto &notif : notifications)
@@ -166,7 +164,7 @@ int main()
 
         ImGui::End();
 
-        // Rendering.
+        // Rendering
         ImGui::Render();
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
@@ -177,7 +175,7 @@ int main()
         glfwSwapBuffers(window);
     }
 
-    // Cleanup.
+    // Cleanup
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();

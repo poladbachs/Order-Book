@@ -12,7 +12,7 @@ public:
     double price;
     int quantity;
     bool active;
-    std::string symbol; // Asset symbol (e.g., "BTC", "ETH", "AAPL", "GOLD")
+    std::string symbol; // Asset symbol ("BTC", "ETH", "AAPL", "GOLD")
 
     // Constructor now takes a symbol.
     Order(int id, OrderType type, OrderSide side, double price, int quantity, const std::string &symbol);
