@@ -1,4 +1,5 @@
 #include "../headers/order.hpp"
+#include "../headers/enum.hpp"
 #include <sstream>
 
 namespace {
@@ -11,15 +12,19 @@ namespace {
             default:                    return "Unknown";
         }
     }
+    std::string orderSideToString(OrderSide side) {
+        return (side == OrderSide::Buy) ? "Buy" : "Sell";
+    }
 }
 
-Order::Order(int id, OrderType type, double price, int quantity)
-    : id(id), type(type), price(price), quantity(quantity), active(true) {}
+Order::Order(int id, OrderType type, OrderSide side, double price, int quantity)
+    : id(id), type(type), side(side), price(price), quantity(quantity), active(true) {}
 
 std::string Order::toString() const {
     std::ostringstream oss;
     oss << "ID: " << id 
-        << ", Type: " << orderTypeToString(type)
+        << ", " << orderSideToString(side)
+        << ", " << orderTypeToString(type)
         << ", Price: " << price 
         << ", Qty: " << quantity 
         << ", Active: " << (active ? "Yes" : "No");
