@@ -1,6 +1,7 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
+#include "implot.h"
 #include "../headers/orderbook.hpp"
 #include "../headers/enum.hpp"
 #include "../headers/globals.hpp"
@@ -11,58 +12,68 @@
 #include <string>
 #include <sstream>
 #include <unordered_map>
+#include <chrono>
 
-// Define global variables (already declared in globals.hpp)
+// Global variables
 Account account;
 std::vector<std::string> notifications;
 
-// Helper function to format account balance for selected asset
+// Each asset gets its own current market price...
+std::unordered_map<std::string, double> assetPrices = {
+    {"BTC", 70000.0},
+    {"ETH", 1500.0},
+    {"AAPL", 220.0},
+    {"GOLD", 2800.0}
+};
+
+// ...and a price history (for the chart)
+std::unordered_map<std::string, std::vector<double>> priceHistory;
+
+// Helper to format the account info
 std::string accountToString(const Account &acc, const std::string &asset) {
     int assetQty = acc.assets.count(asset) ? acc.assets.at(asset) : 0;
     std::ostringstream oss;
-    oss << "Cash: $" << acc.cash << " | Asset (" << asset << "): " << assetQty;
+    oss << "Cash: $" << acc.cash << " | " << asset << ": " << assetQty;
     return oss.str();
 }
 
 int main()
 {
-    // Initialize GLFW with macOS-compatible hints (OpenGL 3.2 Core Profile)
-    if (!glfwInit()) return -1;
+    // GLFW and OpenGL initialization
+    if (!glfwInit())
+        return -1;
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-
     GLFWwindow* window = glfwCreateWindow(1280, 720, "Order Book Engine", NULL, NULL);
-    if (!window) return -1;
+    if (!window)
+        return -1;
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
 
-    // Setup ImGui context and style (modern dark theme)
+    // ImGui and ImPlot initialization
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    ImPlot::CreateContext();
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
-    // Use GLSL version 150 (compatible with macOS)
     ImGui_ImplOpenGL3_Init("#version 150");
 
-    // Initialize global account: starting with $10,000 and empty assets
-    account.cash = 10000.0;
+    // Initialize starting cash and clear asset holdings
+    account.cash = 100000.0;
+    account.assets.clear();
 
-    // Create a mapping for each asset's current market price (realistic values)
-    std::unordered_map<std::string, double> assetPrices = {
-        {"BTC", 80000.0},
-        {"ETH", 1500.0},
-        {"AAPL", 220.0},
-        {"GOLD", 2900.0}
-    };
+    // Pre-populate each asset’s price history (starting with 100 identical points)
+    for (const auto &pair : assetPrices)
+        priceHistory[pair.first] = std::vector<double>(100, pair.second);
 
-    // Asset selection: available asset symbols
+    // Asset selection list
     const char* assetList[] = {"BTC", "ETH", "AAPL", "GOLD"};
     int selectedAssetIndex = 0;
     std::string currentAsset = assetList[selectedAssetIndex];
 
-    // Input buffers for order entry
+    // Buffers and selection for order entry
     char priceBuffer[32] = "100.0";
     char quantityBuffer[32] = "1";
     char cancelBuffer[32] = "";
@@ -70,30 +81,43 @@ int main()
     int selectedOrderSide = 0;  // 0: Buy, 1: Sell
 
     OrderBook orderBook;
-
     std::srand(static_cast<unsigned>(std::time(nullptr)));
+
+    // Use chrono to update the simulation less frequently than every frame.
+    auto lastUpdate = std::chrono::steady_clock::now();
+    const int updateIntervalMs = 100; // update every 100 ms
 
     while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
 
-        // Update current asset based on selection
-        currentAsset = assetList[selectedAssetIndex];
-        // Get the current price for the selected asset
-        double currentPrice = assetPrices[currentAsset];
+        // Only update the price simulation at fixed intervals.
+        auto now = std::chrono::steady_clock::now();
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate).count() >= updateIntervalMs)
+        {
+            // Update the current asset and its price
+            currentAsset = assetList[selectedAssetIndex];
+            double currentPrice = assetPrices[currentAsset];
 
-        // Simulate a percentage-based random walk (delta between -0.5% and +0.5%)
-        double delta = ((std::rand() % 101) - 50) / 10000.0;
-        currentPrice *= (1 + delta);
-        // Ensure a minimum price (e.g., 1.0) so it never goes negative
-        if (currentPrice < 1.0) currentPrice = 1.0;
-        // Update price map
-        assetPrices[currentAsset] = currentPrice;
+            // Use a smaller random change (e.g. ±0.1%) to slow down the movement
+            double delta = ((std::rand() % 101) - 50) / 100000.0;
+            currentPrice *= (1 + delta);
+            if (currentPrice < 1.0)
+                currentPrice = 1.0;
+            assetPrices[currentAsset] = currentPrice;
 
-        // Process StopLoss and TakeProfit orders for the selected asset
-        orderBook.simulateMarket(currentPrice);
+            // Update the price history for charting (keeping the last 100 points)
+            priceHistory[currentAsset].push_back(currentPrice);
+            if (priceHistory[currentAsset].size() > 100)
+                priceHistory[currentAsset].erase(priceHistory[currentAsset].begin());
 
-        // Start ImGui frame
+            // Process any StopLoss/TakeProfit orders for the current asset
+            orderBook.simulateMarket(currentPrice);
+
+            lastUpdate = now;
+        }
+
+        // Start a new ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
@@ -101,16 +125,37 @@ int main()
         // Main UI Window
         ImGui::Begin("Order Book Engine");
 
-        // Asset selection
+        // Asset selection combo
         ImGui::Text("Select Asset:");
         ImGui::Combo("Asset", &selectedAssetIndex, assetList, IM_ARRAYSIZE(assetList));
+        currentAsset = assetList[selectedAssetIndex];
 
-        // Display market price and correct asset balance
+        // Display the current market price and account info
+        double currentPrice = assetPrices[currentAsset];
         ImGui::Text("Current %s Price: %.2f", currentAsset.c_str(), currentPrice);
         ImGui::Text("%s", accountToString(account, currentAsset).c_str());
         ImGui::Separator();
 
-        // Section: Place New Order
+        // Price chart (using ImPlot)
+        if (ImPlot::BeginPlot("Price Chart", ImVec2(-1, 200))) {
+            ImPlot::SetupAxes("Time", "Price", 0, ImPlotAxisFlags_AutoFit);
+            std::vector<double> xData(priceHistory[currentAsset].size());
+            for (size_t i = 0; i < xData.size(); i++)
+                xData[i] = i; // Use the index as the X-axis (time) value
+            ImPlot::PlotLine(currentAsset.c_str(), xData.data(), priceHistory[currentAsset].data(), xData.size());
+            ImPlot::EndPlot();
+        }
+        ImGui::Separator();
+
+        // Active orders section: show orders that are still active for the current asset
+        ImGui::Text("Active Orders:");
+        for (const auto &order : orderBook.getOrders()) {
+            if (order.active && order.symbol == currentAsset)
+                ImGui::TextWrapped("%s", order.toString().c_str());
+        }
+        ImGui::Separator();
+
+        // Order placement section
         ImGui::Text("Place New Order");
         const char* orderTypes[] = {"Market", "Limit", "StopLoss", "TakeProfit"};
         ImGui::Combo("Order Type", &selectedOrderType, orderTypes, IM_ARRAYSIZE(orderTypes));
@@ -122,9 +167,9 @@ int main()
         {
             double orderPrice = atof(priceBuffer);
             int orderQuantity = atoi(quantityBuffer);
-            // Check if user has enough assets for a sell order
-            int ownedQty = account.assets.count(currentAsset) ? account.assets[currentAsset] : 0;
-            if (selectedOrderSide == 1 && orderQuantity > ownedQty) {
+            // For Sell orders, check if there are enough assets available.
+            if (selectedOrderSide == 1 &&
+                orderQuantity > (account.assets.count(currentAsset) ? account.assets.at(currentAsset) : 0)) {
                 notifications.push_back("Order Rejected: Insufficient " + currentAsset + " assets to sell.");
             } else {
                 OrderType type = static_cast<OrderType>(selectedOrderType);
@@ -134,7 +179,7 @@ int main()
         }
         ImGui::Separator();
 
-        // Section: Cancel Order
+        // Order cancellation section
         ImGui::Text("Cancel Order");
         ImGui::InputText("Order ID", cancelBuffer, IM_ARRAYSIZE(cancelBuffer));
         if (ImGui::Button("Cancel Order"))
@@ -144,27 +189,16 @@ int main()
         }
         ImGui::Separator();
 
-        // Section: Active Orders
-        ImGui::Text("Active Orders:");
-        for (const auto &order : orderBook.getOrders())
-        {
-            if (order.active && order.symbol == currentAsset)
-                ImGui::TextWrapped("%s", order.toString().c_str());
-        }
-        ImGui::Separator();
-
-        // Section: Notifications (scrollable)
+        // Notifications (scrollable)
         ImGui::Text("Notifications:");
         ImGui::BeginChild("Notifications", ImVec2(0, 150), true);
         for (const auto &notif : notifications)
-        {
             ImGui::TextWrapped("%s", notif.c_str());
-        }
         ImGui::EndChild();
 
         ImGui::End();
 
-        // Rendering
+        // Render frame
         ImGui::Render();
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
@@ -176,6 +210,7 @@ int main()
     }
 
     // Cleanup
+    ImPlot::DestroyContext();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
