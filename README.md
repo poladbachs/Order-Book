@@ -2,7 +2,7 @@
 
 # C++ Order Book Engine
 
-A C++ pet project that simulates a realistic order book engine (Crypto, Commodities, Stocks) for algo trading. The engine supports multiple asset types with independent price simulations, various order types (Market, Limit, StopLoss, TakeProfit), and active order management—all showcased in a modern GUI with real‑time charts.
+A C++ pet project that simulates a realistic order book engine (Crypto, Commodities, Stocks) for Algorithmic Trading. The engine supports multiple asset types with independent price simulations, various order types (Market, Limit, StopLoss, TakeProfit), and active order management—all showcased in a modern GUI with real‑time charts.
 
 ---
 
